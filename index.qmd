@@ -1,0 +1,1110 @@
+---
+title: "Diversity and Distribution course support"
+format:
+    html:
+      number-sections: true
+      toc: true
+editor: visual
+# https://quarto.org/docs/computations/execution-options.html#output-options
+execute:
+  # show code chunk output
+  include: true
+  # Show the code in the output
+  echo: true
+  # Show messages
+  message: true
+  # Show warnings
+  warning: true
+  # Cache code results
+  cache: true
+bibliography: references.bib
+---
+
+```{r}
+#| label: Install
+#| include: false
+### Utilities for R.
+
+# Necessary packages
+packages_required <- c(
+  # R tools
+  "knitr", "tidyverse", 
+  # Scientific packages
+  "ade4", "divent", "GoFKernel", "sads", "untb", "vegan"
+)
+# Already installed?
+packages_installed <- vapply(
+  packages_required, 
+  FUN = requireNamespace, 
+  FUN.VALUE = TRUE, 
+  quietly = TRUE
+) 
+# Install missing packages
+install.packages(names(packages_installed)[!packages_installed])
+
+# Chunk font size hook: allows size='small' 
+# or any valid Latex font size in chunk options
+def.chunk.hook <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(
+  chunk = function(x, options) {
+    x <- def.chunk.hook(x, options)
+    ifelse(
+      options$size == "normalsize", 
+      yes = x,
+      no = paste0("\n \\", options$size, "\n\n", x, "\n\n \\normalsize")
+    )
+  }
+)
+```
+
+# Motivation
+
+This document contains code chunks to help you understanding the course.
+Don't hesitate to modify them, add your own notes and code.
+
+It comes with a practical you will run at home (`Biodiv-Practical.Rmd`).
+
+# Species distributions
+
+## Figures
+
+### Preston diagram
+
+```{r}
+library("tidyverse")
+library("vegan")
+data(BCI)
+# Sum the 50 1-ha plots
+BCI_50ha_abd <- colSums(BCI)
+BCI_50ha_abd %>% 
+  log10() %>% 
+  hist(breaks = 15, main = "Preston diagram")
+```
+
+Probability densities
+
+```{r}
+BCI_50ha_abd %>% 
+  tibble(abundance = .) %>% 
+  ggplot() +
+  # Bounded density
+  geom_density(aes(x = abundance), bounds = c(0, Inf)) +
+  scale_x_log10()
+```
+
+### Whittaker diagram
+
+```{r}
+library("divent")
+BCI_50ha_abd %>% 
+  # Declare it is an "abundances" object
+  as_abundances() %>% 
+  autoplot()
+```
+
+## Broken stick
+
+Random distributions are created by `divent::rxxx()`functions.
+
+```{r}
+rcommunity(
+  # One community
+  1,
+  # Number of trees
+  size = 10000,
+  # Number of species
+  species_number = 300,
+  # Distribution
+  distribution = "bstick"
+) %>% 
+  # Whittaker plot
+  autoplot()
+```
+
+## Geometric
+
+Random distribution.
+
+```{r}
+rcommunity(
+  # One community
+  1,
+  # Number of trees
+  size = 10000,
+  # Number of species
+  species_number = 300,
+  # Distribution
+  distribution = "geom",
+  prob_geom = 0.1
+) %>% 
+  # Whittaker plot
+  autoplot()
+```
+
+## Lognormal
+
+Random distribution.
+
+```{r}
+rcommunity(
+  # One community
+  1,
+  # Number of trees
+  size = 10000,
+  # Number of species
+  species_number = 300,
+  # Distribution
+  distribution = "lnorm",
+  sd_lnorm = 1
+) %>% 
+  # Whittaker plot
+  autoplot()
+```
+
+Modify the standard deviation.
+
+## Log-series
+
+Random distribution.
+
+```{r}
+rcommunity(
+  # One community
+  1,
+  # Number of trees
+  size = 10000,
+  # Number of species is calculated
+  # Distribution
+  distribution = "lseries",
+  fisher_alpha = 40
+) %>% 
+  # Whittaker plot
+  autoplot()
+```
+
+## Estimate the parameters
+
+Draw a very large lognormal distribution.
+
+```{r}
+rcommunity(
+  # One community
+  1,
+  # Number of trees = max supported integer value
+  size = .Machine$integer.max,
+  # Number of species
+  species_number = 300,
+  # Distribution
+  distribution = "lnorm",
+  sd_lnorm = 1
+) %>% 
+  # Name it
+  mutate(site = "Large log-normal") ->
+  comm_large_lnorm
+```
+
+Sample it.
+
+```{r}
+# Draw 3000 trees from the large community
+rcommunity(
+  1,
+  size = 3000,
+  abd = as.numeric(comm_large_lnorm)
+) %>% 
+  # Name it
+  mutate(site = "Small log-normal") ->
+  comm_small_lnorm
+# Make a single tibble with all data
+comm_large_lnorm %>% 
+  # Make a single tibble
+  bind_rows(comm_small_lnorm) ->
+  comm_lnorm
+# Plot the distributions and fit a lognormal model
+autoplot(comm_lnorm, fit_rac = TRUE, distribution = "lnorm")
+# Estimate the parameters
+fit_rac(comm_lnorm, distribution = "lnorm") 
+```
+
+## Zero-sum multinomial distribution
+
+BCI parameters $\theta$ and $m$ are estimated following @etienne2005 with the untb package.
+
+```{r}
+#| label: bci_params
+#| echo: true
+# BCI data
+library("vegan")
+data(BCI)
+BCI_50ha <- colSums(BCI)
+# Don't load untb because of conflicts with dplyr::count() and select()
+# library("untb")
+if (file.exists("data/BCI_logkda.RData")) {
+  # Use the saved result if available to save
+  # computation resources
+  load("data/BCI_logkda.RData")
+} else {
+  BCI_50ha %>% 
+  # name conflict with dplyr::count()
+  untb::count() %>% 
+  # requires pari/gp installed and in the search paths,
+  # or use gp_binary argument
+  untb::logkda() ->
+  BCI_logkda
+  # Save the result
+  save(BCI_logkda, file = "data/BCI_logkda.RData")
+}
+BCI_50ha %>% 
+  # name conflict with dplyr::count()
+  untb::count() %>% 
+  # Estimate theta and m
+  untb::optimal.params(log.kda = BCI_logkda) %>% 
+  print() ->
+  BCI_params
+```
+
+The distribution of the local community is derived.
+$J$ is that of BCI and $m$ was estimated previously.
+
+```{r}
+#| label: bci_sim_code
+#| echo: true
+J <- sum(BCI)
+theta <- BCI_params[1]
+m <- BCI_params[2]
+library("sads")
+# Number of species in the local community
+Svolkov(theta, m, J) %>% 
+  # Must be integers for the simulation
+  round() %>% 
+  # Draw the species abundances
+  rvolkov(theta, m, J) %>% 
+  # Make it an abundances object top plot it
+  as_abundances() %>% 
+  # Whittaker plot
+  autoplot() ->
+  BCI_sim_neutral
+# BCI real distribution
+BCI_50ha %>% 
+  sort(decreasing = TRUE) %>% 
+  as_tibble() %>% 
+  mutate(rank = seq_len(n())) -> 
+  BCI_tbl_50ha
+# Plot altogether
+BCI_sim_neutral +
+  geom_line(
+    data = BCI_tbl_50ha,
+    aes(x = rank, y = value)
+  )
+```
+
+# Species Accumulation Curves
+
+## BCI data
+
+Gather all subplots.
+
+```{r}
+library("vegan")
+data(BCI)
+BCI %>% 
+  # Make an abundances object
+  as_abundances() %>% 
+  # Make all plot weights equals
+  mutate(weight = 1) %>% 
+  # Gather all 50 plots
+  metacommunity() %>% 
+  # Name it
+  mutate(site = "BCI") -> 
+  BCI_all
+autoplot(BCI_all, fit_rac = TRUE, distribution = "lnorm")
+fit_rac(BCI_all, distribution = "lnorm") 
+```
+
+Abundance frequency counts help read the figure.
+
+```{r}
+BCI %>% 
+colSums() %>% 
+abd_freq_count() %>% 
+arrange(desc(abundance))
+```
+
+## Accumulation of subplots
+
+Accumulate subplots in random order (Monte-Carlo).
+Plot the expectation and the confidence interval of the number of species with respect to the number of samples.
+
+```{r}
+BCI %>% 
+  specaccum() %>% 
+  plot()
+```
+
+## Accumulation curve
+
+Compute the expected accumulation curve of BCI up to twice the sampling effort, with its confidence interval.
+
+```{r}
+# Number of trees in BCI
+BCI_n <- abd_sum(BCI_all, as_numeric = TRUE)
+# Asymptotic richness
+BCI_richness <- div_richness(BCI_all, as_numeric = TRUE)
+BCI_all %>% 
+  accum_hill(
+    levels = seq(from = 1, to = 2 * BCI_n, by = 10),
+    # Run simulations to estimate uncertainty.
+    # Start with 10 simulations, run 100 later
+    n_simulations = 10,
+  ) %>% 
+  autoplot() +
+  geom_vline(xintercept = BCI_n, linetype = 2) +
+  geom_hline(yintercept = BCI_richness, linetype = 1)
+```
+
+# Canonical lognormal
+
+ggplot seems to bug with weighted, bounded density and log scale.
+
+```{r}
+# Most adundant species
+BCI_50ha_mas <- max(BCI_50ha_abd)
+BCI_50ha_abd %>% 
+  tibble(abundance = .) %>% 
+  ggplot() +
+  # Bounded density
+  geom_density(
+    aes(x = abundance, color = "Species curve"), 
+    bounds = c(0, Inf)
+  ) +
+  # Weighted density
+  geom_density(
+    aes(x = abundance, weight = abundance, color = "Individuals curve"), 
+    bounds = c(min(BCI_50ha_abd), max(BCI_50ha_abd))
+  ) +
+  scale_x_log10()
+```
+
+Correct curves.
+
+```{r}
+library("GoFKernel")
+plot(
+  density.reflected(log10(BCI_50ha_abd), lower = 0),
+  type = "l", 
+  col = "red", 
+  ylim = c(0, .8),
+  main = "Canonical BCI",
+  xlab = "log10(abundance)"
+)
+lines(
+  density.reflected(
+    log10(BCI_50ha_abd), 
+    weights = BCI_50ha_abd, 
+    lower = min(log10(BCI_50ha_abd)), 
+    upper = max(log10(BCI_50ha_abd))
+  )
+)
+abline(v = max(log10(BCI_50ha_abd)), lty = 2)
+
+```
+
+# Richness
+
+## Dummy communities
+
+Build dummy communities.
+
+```{r}
+tibble(
+  sp_1 = c(10, 10, 1000, 1000),
+  sp_2 = c(10, 11,    1,    0)
+) %>% 
+  as_abundances() %>% 
+  print() ->
+  comm_dummy
+```
+
+Sample richness.
+
+```{r}
+div_richness(comm_dummy, estimator = "naive")
+```
+
+Asymptotic richness.
+
+```{r}
+div_richness(comm_dummy)
+```
+
+## Paracou 6
+
+Prepare the data: gather the four subplots.
+
+```{r}
+paracou_6_abd %>% 
+  # Gather all sites
+  metacommunity() %>% 
+  # Rename "matacommunity"
+  mutate(site = "Paracou 6") ->
+  p6_abundances
+autoplot(p6_abundances)
+```
+
+Abundance frequencies.
+
+```{r}
+p6_abundances %>% 
+  as.numeric() %>% 
+  abd_freq_count()
+```
+
+Estimators of richness.
+
+```{r}
+div_richness(p6_abundances, estimator = "naive") %>% 
+  bind_rows(div_richness(p6_abundances, estimator = "Chao1")) %>% 
+  bind_rows(div_richness(p6_abundances, estimator = "iChao")) %>% 
+  # Default estimator
+  bind_rows(div_richness(p6_abundances, estimator = "jackknife")) %>% 
+  bind_rows(div_richness(p6_abundances, estimator = "jackknife", jack_max = 1))
+```
+
+## Interpolation / extrapolation
+
+Diversity of 1 ha in Paracou.
+
+```{r}
+# Number of trees per hectare
+p6_density <- abd_sum(p6_abundances, as_numeric = TRUE) / 6.25
+# Richness
+p6_abundances %>% 
+  div_richness(level = round(p6_density))
+```
+
+Diversity of 10 ha in Paracou.
+
+```{r}
+# Richness
+p6_abundances %>% 
+  div_richness(level = round(10 * p6_density))
+```
+
+# Shannon
+
+## Information function
+
+Information brought by an individual: $I(p_s) = \ln(1 / p_s)$.
+
+```{r}
+ggplot() +
+  # Increase the default number of points (101 to 1001) for precision
+  geom_function(fun = \(p) {log(1 / p)}, n = 1001) +
+  labs(x = "Probability", y = "Information")
+```
+
+Information brought by a species: $p_s \ln(1 / p_s)$.
+
+```{r}
+ggplot() +
+  geom_function(fun = \(p) {p * log(1 / p)}, n = 1001) +
+  labs(x = "Probability", y = "Information")
+```
+
+## Paracou 6
+
+Estimators.
+
+```{r}
+ent_shannon(p6_abundances, estimator = "naive") %>% 
+  bind_rows(ent_shannon(p6_abundances, estimator = "UnveilJ")) %>% 
+  bind_rows(ent_shannon(p6_abundances, estimator = "ChaoJost")) %>% 
+  print() ->
+  p6_shannon
+```
+
+Effective number of species: $e^H$.
+
+```{r}
+p6_shannon %>% 
+  mutate(diversity = exp(entropy))
+```
+
+## Dummy communities
+
+Compare entropy.
+
+```{r}
+comm_dummy
+ent_shannon(comm_dummy, estimator = "naive")
+```
+
+# Simpson
+
+## Paracou 6
+
+Estimators.
+
+```{r}
+ent_simpson(p6_abundances, estimator = "naive") %>% 
+  bind_rows(ent_simpson(p6_abundances, estimator = "Lande")) %>% 
+  bind_rows(ent_simpson(p6_abundances, estimator = "UnveilJ")) %>% 
+  bind_rows(ent_simpson(p6_abundances, estimator = "ChaoJost")) %>% 
+  print() ->
+  p6_simpson
+```
+
+Effective number of species: $1 / (1 - E)$.
+
+```{r}
+p6_simpson %>% 
+  mutate(diversity = 1 / (1 - entropy))
+```
+
+# Generalized entropy
+
+## Information
+
+Information brought by an individual: $I(p_s) = \ln_q(1 / p_s)$.
+
+```{r}
+ggplot() +
+  # Increase the default number of points (101 to 1001) for precision
+  geom_function(fun = \(p) {ln_q(1 / p, q = 0)}, n = 1001, aes(color = "0")) + 
+  geom_function(fun = \(p) {ln_q(1 / p, q = 1)}, n = 1001, aes(color = "1")) + 
+  geom_function(fun = \(p) {ln_q(1 / p, q = 2)}, n = 1001, aes(color = "2")) +
+  scale_y_continuous(limits = c(0, 10)) +
+  labs(x = "Probability", y = "Information", color = "q")
+```
+
+Information brought by a species: $p_s \ln_q(1 / p_s)$.
+
+```{r}
+ggplot() +
+  # Increase the default number of points (101 to 1001) for precision
+  geom_function(fun = \(p) {p * ln_q(1 / p, q = 0)}, n = 1001, aes(color = "0")) + 
+  geom_function(fun = \(p) {p * ln_q(1 / p, q = 1)}, n = 1001, aes(color = "1")) + 
+  geom_function(fun = \(p) {p * ln_q(1 / p, q = 2)}, n = 1001, aes(color = "2")) +
+  labs(x = "Probability", y = "Information", color  = "q")
+```
+
+## Paracou 6
+
+Diversity profile.
+
+```{r}
+p6_abundances %>% 
+  profile_hill() %>% 
+  autoplot() +
+  # Don't print the legend
+  theme(legend.position = "none")
+```
+
+Compare estimators.
+
+```{r}
+p6_abundances %>% 
+  profile_hill(estimator = "UnveilJ") %>%
+  # Use the site name to store the estimator's name
+  mutate(site = "UnveilJ") %>% 
+  bind_rows(
+    p6_abundances %>% 
+    profile_hill(estimator = "ChaoJost") %>% 
+    mutate(site = "ChaoJost")
+  ) %>% 
+  bind_rows(
+    p6_abundances %>% 
+    profile_hill(estimator = "naive") %>% 
+    mutate(site = "naive")
+  ) %>% 
+  autoplot() +
+  labs(color  = "Estimator")
+```
+
+Extreme values.
+
+The reciprocal of the Berger-Parker index [@Berger1970] is the rarity of the most abundant species $^{+\infty}D$.
+
+```{r}
+# q = 1000 is enough for infinity
+div_hill(p6_abundances, q = 1000)
+# Compare to 
+p6_abundances %>% 
+  # Extract proobabilities
+  as_probabilities(as_numeric = TRUE) %>% 
+  # Max value
+  max() %>% 
+  # Reciprocal
+  `^`(-1)
+  
+```
+
+## Dummy communities
+
+Compare diversity
+
+```{r}
+comm_dummy
+div_hill(comm_dummy, q = 1, estimator = "naive")
+```
+
+# Comparing diversity
+
+## Asymptotic diversity
+
+Compare asymptotic diversity of Paracou and BCI, extend $q$.
+
+```{r}
+# Orders from 0 to 4
+q_seq_0_4 <- seq(from = 0, to = 4, by = 0.1)
+profile_hill(p6_abundances, orders = q_seq_0_4) %>% 
+  bind_rows(profile_hill(BCI_all, orders = q_seq_0_4)) %>% 
+  autoplot()
+```
+
+## Standardized diversity
+
+The sampling effort is very different: 50 ha in BCI, 6.25 ha in Paracou.
+The asymptotic estimation is less reliable in Paracou.
+
+Compare diversity at the same sampling effort, say 10 ha.
+
+```{r}
+# Number of trees in 10 ha
+p6_n_10ha <- round(abd_sum(p6_abundances, as_numeric = TRUE) / 6.25 * 10)
+BCI_n_10_ha <- round(sum(BCI_all) / 5)
+```
+
+Compare diversity of 10 ha.
+
+```{r}
+profile_hill(p6_abundances, level = p6_n_10ha) %>% 
+  bind_rows(profile_hill(BCI_all, level = BCI_n_10_ha)) %>% 
+  autoplot()
+```
+
+## Sample coverage
+
+```{r}
+coverage(p6_abundances) %>% 
+  bind_rows(coverage(BCI_all))
+```
+
+Compare diversity at the same sample coverage [@Chao2012b], that of Paracou.
+
+```{r}
+reference_coverage <- coverage(p6_abundances, as_numeric = TRUE)
+profile_hill(p6_abundances, level = reference_coverage) %>% 
+  bind_rows(profile_hill(BCI_all, level = reference_coverage)) %>% 
+  autoplot()
+```
+
+# Phylogenetic diversity
+
+## Mock data
+
+A simple community with 3 species.
+
+```{r}
+mock_3sp_abd %>% 
+  as_abundances() %>% 
+  mutate(site = "Mock 3 species") %>% 
+  print() ->
+  mock_3sp_abundances
+```
+
+```{r}
+library("ape")
+# Prepare the tree for convenience: make the branches twice longer
+mock_3sp_tree$edge.length <- 2 * mock_3sp_tree$edge.length
+plot(mock_3sp_tree, direction = "downwards", srt = 90)
+axis(2)
+```
+
+PD is the total length of branches
+
+```{r}
+div_pd(mock_3sp_abd, tree = mock_3sp_tree)
+```
+
+Rao.
+
+```{r}
+ent_rao(mock_3sp_abundances, tree = mock_3sp_tree, estimator = "naive")
+```
+
+The tree is normalized to height = 1 by default.
+Without normalization:
+
+```{r}
+ent_rao(
+  mock_3sp_abundances, 
+  tree = mock_3sp_tree, 
+  estimator = "naive", 
+  normalize = FALSE
+)
+```
+
+## Paracou 6
+
+`paracou_6_taxo` is a taxonomic tree: distance is 1 between species of the same genus, 2 between genera of the same family, 3 between families.
+
+```{r}
+plot(paracou_6_taxo, type = "fan", show.tip.label = FALSE) 
+```
+
+Calculate Rao's entropy and phylogenetic entropy of order 2
+
+```{r}
+ent_rao(p6_abundances, tree = paracou_6_taxo) %>% 
+  bind_rows(
+    ent_phylo(p6_abundances, tree = paracou_6_taxo, q = 2)
+  )
+```
+
+Rao's entropy is not an effective number of species, but the average phylogenetic distance between two individuals.
+The corresponding Hill number is:
+
+```{r}
+div_phylo(p6_abundances, tree = paracou_6_taxo, q = 2)
+```
+
+Diversity profile
+
+```{r}
+profile_phylo(p6_abundances, tree = paracou_6_taxo) %>% 
+  autoplot()
+```
+
+# Functional diversity
+
+## Mock data
+
+The same mock data is used.
+Distances between species is now assumed to be in the trait space.
+Distances between species.
+
+```{r}
+mock_3sp_dist
+```
+
+Plot the trait space.
+
+```{r}
+library("ade4")
+mock_pcoa <- dudi.pco(mock_3sp_dist, scannf = FALSE)
+scatter(mock_pcoa, posieig = "none")
+```
+
+Similarity between species.
+
+```{r}
+# The dist object must be converted to a matrix
+mock_3sp_Z <- 1 - as.matrix(mock_3sp_dist) / max(mock_3sp_dist)
+mock_3sp_Z
+```
+
+Ordinariness.
+
+```{r}
+# Probabilities of species
+mock_3sp_prob <- mock_3sp_abd / sum(mock_3sp_abd)
+# Ordinariness of species
+mock_3sp_O <- as.numeric(mock_3sp_Z %*% mock_3sp_prob)
+# Compare probabilities and ordinariness
+tibble(
+  Probability = mock_3sp_prob,
+  Rarity_p = 1 / mock_3sp_prob,
+  Ordinariness = mock_3sp_O,
+  Rarity_0 = 1 / mock_3sp_O
+)
+```
+
+Diversity.
+
+```{r}
+profile_similarity(
+  mock_3sp_abundances, 
+  similarities = mock_3sp_Z, 
+  estimator = "naive"
+) %>% 
+  autoplot()
+```
+
+Diversity of order 2 (i.e. Rao's).
+
+```{r}
+ent_similarity(
+  mock_3sp_abundances, 
+  similarities = mock_3sp_Z, 
+  q = 2, 
+  estimator = "naive"
+)
+```
+
+## Paracou 6
+
+The species traits are maximum height (95^th^ percentile) and seed mass, maximum height (95^th^ percentile) and seed mass.
+A distance matrix was built (see home practical).
+Distribution of distances between species.
+
+```{r}
+paracou_6_fundist %>% 
+  as.numeric() %>% 
+  tibble(Distance = .) %>% 
+  ggplot() +
+  geom_density(aes(x = Distance))
+```
+
+Diversity profile.
+
+```{r}
+p6_abundances %>% 
+  profile_similarity(
+    similarities = 1 - as.matrix(paracou_6_fundist) / max(paracou_6_fundist)
+  ) %>% 
+  autoplot()
+```
+
+## Intraspecific variability
+
+Coordinates of species A, B and C in the trait space.
+
+```{r}
+mock_pcoa$li
+```
+
+Plot individuals in the trait space, with a small variability.
+
+```{r}
+# Create coordinates
+tibble(
+  Species = rep(names(mock_3sp_abd), times = mock_3sp_abd),
+  x = rep(mock_pcoa$li[, 1], times = mock_3sp_abd),
+  y = rep(mock_pcoa$li[, 2], times = mock_3sp_abd)
+) ->
+  mock_3sp_ind
+# Choose variability
+variability <- 0.1
+# Map
+mock_3sp_ind %>% 
+  # Add variability
+  mutate(
+    x = x + rnorm(n(), mean = 0, sd = variability),
+    y = y + rnorm(n(), mean = 0, sd = variability)
+  ) %>% 
+  ggplot(aes(x = x, y = y, color = Species)) +
+  geom_point() +
+  coord_fixed()
+```
+
+Diversity of the 6 individuals.
+First, without variability.
+
+```{r}
+# Choose variability
+variability <- 0
+# Create the point set
+mock_3sp_ind %>% 
+  # Add variability
+  mutate(
+    x = x + rnorm(n(), mean = 0, sd = variability),
+    y = y + rnorm(n(), mean = 0, sd = variability)
+  )  %>% 
+  # Distance matrix
+  dist() %>% 
+  as.matrix() ->
+  mock_6ind_dist
+# Delete the row and column name of the matrix (they are not species names)
+rownames(mock_6ind_dist) <- colnames(mock_6ind_dist) <- NULL
+# Total abundance
+mock_6ind_n <- nrow(mock_6ind_dist)
+# Similarity
+mock_6ind_Z <- 1 - mock_6ind_dist / max(mock_6ind_dist)
+# Abundances of individuals are 1, or any identical value
+mock_6ind_abd <- rep(1, mock_6ind_n)
+# Diversity
+profile_similarity(
+  mock_6ind_abd, 
+  similarities = mock_6ind_Z,
+  estimator = "naive"
+) %>% 
+  autoplot()
+```
+
+Change the variability (0.1 first) and run the code again.
+
+# Diversity partitioning
+
+## Mock data
+
+Three habitats: A, B, C.
+
+```{r}
+matrix(
+  c(
+    0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 0, 1, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 1, 1, 1
+  ),
+  nrow = 3, 
+  byrow = TRUE
+) %>% 
+  as_abundances() %>% 
+  mutate(
+    site = paste("Habitat", LETTERS[1:3]),
+    weight = 1
+  ) ->
+  mock_island_abd
+```
+
+Richness.
+
+```{r}
+div_richness(mock_island_abd, estimator = "naive")
+div_richness(mock_island_abd, gamma = TRUE, estimator = "naive")
+```
+
+Multiplicative partitioning: 10 effective species ($\gamma$) = 5 effective species per habitat ($\alpha$) times 2 habitats ($\beta$).
+
+```{r}
+div_part(mock_island_abd, q = 0, estimator = "naive")
+```
+
+Additive partitioning: 10 effective species ($\gamma$) = 5 effective species per habitat ($\alpha$) + 5 more species ($\beta$).
+
+## Paracou 6
+
+The plot is made of 4 subplots.
+
+```{r}
+# Diversity profiles of the 4 subplots
+paracou_6_abd %>% 
+  profile_hill() %>% 
+  autoplot()
+```
+
+### Partitioning
+
+Function `div_part()` computes $\alpha$, $\beta$ and $\gamma$ diversity.
+
+```{r}
+div_part(paracou_6_abd, q = 1)
+```
+
+### Step by step
+
+```{r}
+# Alpha entropy
+paracou_6_abd %>% 
+  ent_tsallis(q = 1) %>% 
+  # Mean entropy
+  group_by(order) %>% 
+  summarise(ent_alpha = mean(entropy)) %>% 
+  # Diversity
+  mutate(div_alpha = exp_q(ent_alpha, q = 1)) %>% 
+  print() ->
+  paracou_6_alpha
+```
+
+```{r}
+# Gamma entropy
+paracou_6_abd %>% 
+  # Group the subplots
+  metacommunity() %>% 
+  ent_tsallis(q = 1) %>%
+  # Rename entropy for clarity
+  rename(ent_gamma = entropy) %>% 
+  # Diversity
+  mutate(div_gamma = exp_q(ent_gamma, q = 1)) %>% 
+  print() ->
+  paracou_6_gamma
+```
+
+```{r}
+# Make a single tibble with alpha and gamma diversities
+paracou_6_alpha %>% 
+  bind_cols(
+    paracou_6_gamma %>% 
+      select(ent_gamma, div_gamma)
+  ) %>% 
+  mutate(
+    # beta entropy
+    ent_beta = ent_gamma - ent_alpha,
+    # beta diversity
+    div_beta = div_gamma / div_alpha
+  )
+```
+
+### Profiles
+
+Not implemented yet in divent.
+
+alpha diversity.
+
+```{r}
+# Values of q used for computation: default values of profile_xxx()
+orders <- seq(from = 0, to = 2, by = 0.1)
+sapply(
+  # Apply ent_tsallis to all orders
+  orders,
+  FUN = \(q) {
+    # Get a number to obtain a matrix with sapply
+    ent_tsallis(paracou_6_abd, q = q, as_numeric = TRUE)
+  }
+) %>% 
+  # Each row contains a subbplot, each column an order, values are entropy
+  # Calculate mean entropy (weights are equal)
+  colMeans() %>% 
+  # Diversity
+  exp_q(q = orders) %>% 
+  # Make a tibble
+  tibble(
+    order = orders,
+    div_alpha = .
+  ) %>% 
+  print() ->
+  paracou_6_alpha_profile
+```
+
+gamma diversity.
+
+```{r}
+paracou_6_abd %>% 
+  profile_hill(gamma = TRUE) %>% 
+  # Rename diversity to recongnize gamma later
+  rename(div_gamma = diversity) %>% 
+  print() ->
+  paracou_6_gamma_profile
+```
+
+Compute beta.
+
+```{r}
+paracou_6_gamma_profile %>% 
+  # Join the tibbles by identical order
+  inner_join(paracou_6_alpha_profile) %>% 
+  # Calculate beta diversity
+  mutate(div_beta = div_gamma / div_alpha) %>% 
+  print() ->
+  paracou_6_profile
+```
+
+Plot.
+
+```{r}
+paracou_6_profile %>% 
+  # paracou_6_profile is an object of class profile that can be plotted
+  # The column to plot must be named diversity
+  rename(diversity = div_alpha) %>% 
+  autoplot() + 
+  theme(legend.position = "none")
+```
+
+```{r}
+paracou_6_profile %>% 
+  # rename div_beta to plot it
+  rename(diversity = div_beta) %>% 
+  autoplot() + 
+  theme(legend.position = "none")
+```
