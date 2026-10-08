@@ -59,8 +59,7 @@ knitr::knit_hooks$set(
 
 # Motivation
 
-This document contains code chunks to help you understanding the course.
-Don't hesitate to modify them, add your own notes and code.
+This document contains code chunks to help you understanding the course. Don't hesitate to modify them, add your own notes and code.
 
 It comes with a practical you will run at home (`Biodiv-Practical.Rmd`).
 
@@ -73,15 +72,17 @@ It comes with a practical you will run at home (`Biodiv-Practical.Rmd`).
 ```{r}
 library("tidyverse")
 library("vegan")
-data(BCI)
+data(BCI) 
+# abondance des espèces dans 50 plots de 1ha
 # Sum the 50 1-ha plots
 BCI_50ha_abd <- colSums(BCI)
 BCI_50ha_abd %>% 
   log10() %>% 
-  hist(breaks = 15, main = "Preston diagram")
+  hist(breaks = 15, main = "Preston diagram") #breaks=nb de divisions de barre
 ```
 
-Probability densities
+Probability densities\
+ggplot doesn't work with vectors -\> we transform it into a tibble
 
 ```{r}
 BCI_50ha_abd %>% 
@@ -102,13 +103,21 @@ BCI_50ha_abd %>%
   autoplot()
 ```
 
+Inductive approach = descriptive\
+-\> on regarde les données et on essaye de sortir des patterns
+
+Deductive approach = mechanistic\
+-\> on crée un modèle et on le compare aux données
+
+# Distributions of abundance
+
 ## Broken stick
 
 Random distributions are created by `divent::rxxx()`functions.
 
 ```{r}
 rcommunity(
-  # One community
+  # Random drawing of one community
   1,
   # Number of trees
   size = 10000,
@@ -119,11 +128,19 @@ rcommunity(
 ) %>% 
   # Whittaker plot
   autoplot()
+
+# it's not random : expected values
 ```
 
 ## Geometric
 
-Random distribution.
+**very uneven distribution**\
+**applied to ecosystems with a laaaaaaaaaarge number of individuals : example soil microorganisms\
+-\> competitive systems**
+
+Random distribution.\
+Every species takes the same share, one after another.\
+Example: 1st species takes 10% -\> the second will take another 10% of what's left etc
 
 ```{r}
 rcommunity(
@@ -135,13 +152,22 @@ rcommunity(
   species_number = 300,
   # Distribution
   distribution = "geom",
-  prob_geom = 0.1
+  prob_geom = 0.1 #paramètre k : part que prennent les espèces à chaque pas (10%)
 ) %>% 
   # Whittaker plot
   autoplot()
+
+# nothing is random here
+# not strictly aligned here because the abundance is only integer=round values
 ```
 
 ## Lognormal
+
+**follows a normal distribution with the central limit theorem**\
+*if you sum whatever random variable, it will be normally distributed*\
+-\> the logarithm of the product of random variables is a sum -\> CLT applies
+
+**usually applies to small tropical forests**
 
 Random distribution.
 
@@ -165,7 +191,23 @@ Modify the standard deviation.
 
 ## Log-series
 
-Random distribution.
+on draw n individus d'une espèce -\> suit une loi de poisson\
+the expected number of individuals is a random variable : E(N_s) = lambda_s\
+but lambda_s is random
+
+negative binomial = number of draws needed to have a certain amount of wins
+
+sharp decrease in gamma distribution -\> k tend vers 0 donc on approxime k=0\
+so now that k=0 -\> ça revient à une binomiale négative ? jsp\
+du coup on a E(S_nu)= alpha/nu\*x\^nu avec x=p/p+1 = close to 1
+
+total number of species : on utilise un développement limité\
+idem pour nombre total d'individus
+
+**alpha is the slope** of the relation between the log of the number of species and the log of the number of individuals
+
+Example : mushrooms community\
+does not work for forests
 
 ```{r}
 rcommunity(
@@ -181,6 +223,32 @@ rcommunity(
   # Whittaker plot
   autoplot()
 ```
+
+#### The gamma function :
+
+k\>1 : forme normale un peu
+
+k\<1 : sharp decrease
+
+```{r}
+ggplot() + geom_function(fun=dgamma, args=list(shape=0.02), #shape = paramètre k
+                         xlim=c(0,10))
+```
+
+## Hubbell neutral theory:
+
+migration rate : 10% in tropical rainforests\
+if no migration -\> the community becomes monospecific\
+This theory is sufficient to explain diversity in tropical forests
+
+number of species in the metacommunity \* speciation rate = **TETA** = fundamental number of biodiversity\
+= how many species appears at each step
+
+**alpha = teta**
+
+-\> the metacommunity is distributed in log-series\
+-\> All Amazon and all French Guiana is distributed in log-series\
+but not Paracou (local community) : log-series when area \~ \>10,000 ha
 
 ## Estimate the parameters
 
@@ -201,9 +269,13 @@ rcommunity(
   # Name it
   mutate(site = "Large log-normal") ->
   comm_large_lnorm
+  # Plot it
+comm_large_lnorm %>% autoplot()
 ```
 
-Sample it.
+Big sample size : no species is unobserved.
+
+Sample it :
 
 ```{r}
 # Draw 3000 trees from the large community
@@ -226,7 +298,19 @@ autoplot(comm_lnorm, fit_rac = TRUE, distribution = "lnorm")
 fit_rac(comm_lnorm, distribution = "lnorm") 
 ```
 
+Fit the distribition of BCI :
+
+```{r}
+BCI_50ha_abd %>% as_abundances() %>% autoplot(fit_rac = TRUE, distribution="lnorm")
+# We can try others distributions :
+BCI_50ha_abd %>% as_abundances() %>% autoplot(fit_rac = TRUE, distribution="geom")
+BCI_50ha_abd %>% as_abundances() %>% autoplot(fit_rac = TRUE, distribution="bstick")
+BCI_50ha_abd %>% as_abundances() %>% autoplot(fit_rac = TRUE, distribution="lseries")
+```
+
 ## Zero-sum multinomial distribution
+
+(nous on a déjà la file donc la partie du code qui calcule se lance pas)
 
 BCI parameters $\theta$ and $m$ are estimated following @etienne2005 with the untb package.
 
@@ -263,8 +347,10 @@ BCI_50ha %>%
   BCI_params
 ```
 
-The distribution of the local community is derived.
-$J$ is that of BCI and $m$ was estimated previously.
+**theta = alpha et m=migration rate**\
+Now we have the parameters of BCI, we simulate the community of BCI based on our parameters and the neutral theory :
+
+*The distribution of the local community is derived.* $J$ is that of BCI and $m$ was estimated previously.
 
 ```{r}
 #| label: bci_sim_code
@@ -274,6 +360,7 @@ theta <- BCI_params[1]
 m <- BCI_params[2]
 library("sads")
 # Number of species in the local community
+# random community. J is the size of the local community, theta & m are for the metacommunity 
 Svolkov(theta, m, J) %>% 
   # Must be integers for the simulation
   round() %>% 
@@ -298,7 +385,21 @@ BCI_sim_neutral +
   )
 ```
 
+black line = real abundances of BCI\
+red line = modeled abundances of BCI based on the parameters and neutral theory
+
+Very hard way to simulate the distribution. The previous way (lognormal approximation) is usually preferred.
+
 # Species Accumulation Curves
+
+Rarefaction curve = theoritical expectation of the accumulation curve (si on la fait un nombre infini de fois puis on prend la moyenne).
+
+With the exact total number of species in the community, we can guess the number of species expected at a certain sample size
+
+**Multinomial distribution** = set of binomial distributions that guarantee that the total number of individuals = sample size ? smth like that
+
+\*\*Vague explication de la formule generalized Simpson entropy :\*\* probability to sample a new individual at each new sampled individual :\
+Ps(1-Ps)\^n \| Ps = probability to draw species S so 1-Ps = probability to draw another species than S and this probability n times (for n drawings) -\> \^n
 
 ## BCI data
 
@@ -332,10 +433,12 @@ arrange(desc(abundance))
 
 ## Accumulation of subplots
 
-Accumulate subplots in random order (Monte-Carlo).
-Plot the expectation and the confidence interval of the number of species with respect to the number of samples.
+Accumulate subplots in random order (Monte-Carlo). Plot the expectation and the confidence interval of the number of species with respect to the number of samples.
 
 ```{r}
+# Plot par plot, pas par individu avec specaccum de vegan (et la manière dont le df de BCI est fait avec 1 ligne par plot ici)
+# ça compute aussi l'intervalle de confiance
+# on utilise plutôt la courbe par individu avec le package divent.+
 BCI %>% 
   specaccum() %>% 
   plot()
@@ -361,6 +464,20 @@ BCI_all %>%
   geom_vline(xintercept = BCI_n, linetype = 2) +
   geom_hline(yintercept = BCI_richness, linetype = 1)
 ```
+
+## Diapos 66-68
+
+### SAC per area :
+
+nb d'individus dans une aire donnée = stochastique\
+suit une loi de Poisson\
+Donc quand on fait une courbe d'accumulation par aire on suppose que c'est proportionnel mais bon voilà quoi
+
+### Spatial structure of the forest :
+
+species are aggregated\
+when doing field surveys, we sample trees close to each other (samples are not independant)\
+-\> we cannot multiply the probabilities
 
 # Canonical lognormal
 
@@ -664,8 +781,7 @@ profile_hill(p6_abundances, orders = q_seq_0_4) %>%
 
 ## Standardized diversity
 
-The sampling effort is very different: 50 ha in BCI, 6.25 ha in Paracou.
-The asymptotic estimation is less reliable in Paracou.
+The sampling effort is very different: 50 ha in BCI, 6.25 ha in Paracou. The asymptotic estimation is less reliable in Paracou.
 
 Compare diversity at the same sampling effort, say 10 ha.
 
@@ -733,8 +849,7 @@ Rao.
 ent_rao(mock_3sp_abundances, tree = mock_3sp_tree, estimator = "naive")
 ```
 
-The tree is normalized to height = 1 by default.
-Without normalization:
+The tree is normalized to height = 1 by default. Without normalization:
 
 ```{r}
 ent_rao(
@@ -762,8 +877,7 @@ ent_rao(p6_abundances, tree = paracou_6_taxo) %>%
   )
 ```
 
-Rao's entropy is not an effective number of species, but the average phylogenetic distance between two individuals.
-The corresponding Hill number is:
+Rao's entropy is not an effective number of species, but the average phylogenetic distance between two individuals. The corresponding Hill number is:
 
 ```{r}
 div_phylo(p6_abundances, tree = paracou_6_taxo, q = 2)
@@ -780,9 +894,7 @@ profile_phylo(p6_abundances, tree = paracou_6_taxo) %>%
 
 ## Mock data
 
-The same mock data is used.
-Distances between species is now assumed to be in the trait space.
-Distances between species.
+The same mock data is used. Distances between species is now assumed to be in the trait space. Distances between species.
 
 ```{r}
 mock_3sp_dist
@@ -844,9 +956,7 @@ ent_similarity(
 
 ## Paracou 6
 
-The species traits are maximum height (95^th^ percentile) and seed mass, maximum height (95^th^ percentile) and seed mass.
-A distance matrix was built (see home practical).
-Distribution of distances between species.
+The species traits are maximum height (95^th^ percentile) and seed mass, maximum height (95^th^ percentile) and seed mass. A distance matrix was built (see home practical). Distribution of distances between species.
 
 ```{r}
 paracou_6_fundist %>% 
@@ -898,8 +1008,7 @@ mock_3sp_ind %>%
   coord_fixed()
 ```
 
-Diversity of the 6 individuals.
-First, without variability.
+Diversity of the 6 individuals. First, without variability.
 
 ```{r}
 # Choose variability
