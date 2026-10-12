@@ -1,7 +1,7 @@
 ---
 title: "Diversity and Distribution course support"
 format:
-    html:
+    pdf:
       number-sections: true
       toc: true
 editor: visual
@@ -59,11 +59,12 @@ knitr::knit_hooks$set(
 
 # Motivation
 
-This document contains code chunks to help you understanding the course. Don't hesitate to modify them, add your own notes and code.
+This document contains code chunks to help you understanding the course.
+Don't hesitate to modify them, add your own notes and code.
 
 It comes with a practical you will run at home (`Biodiv-Practical.Rmd`).
 
-# Species distributions
+# I. Species abundance distributions
 
 ## Figures
 
@@ -198,7 +199,8 @@ but lambda_s is random
 negative binomial = number of draws needed to have a certain amount of wins
 
 sharp decrease in gamma distribution -\> k tend vers 0 donc on approxime k=0\
-so now that k=0 -\> ça revient à une binomiale négative ? jsp\
+so now that k=0 -\> ça revient à une binomiale négative ?
+jsp\
 du coup on a E(S_nu)= alpha/nu\*x\^nu avec x=p/p+1 = close to 1
 
 total number of species : on utilise un développement limité\
@@ -388,7 +390,8 @@ BCI_sim_neutral +
 black line = real abundances of BCI\
 red line = modeled abundances of BCI based on the parameters and neutral theory
 
-Very hard way to simulate the distribution. The previous way (lognormal approximation) is usually preferred.
+Very hard way to simulate the distribution.
+The previous way (lognormal approximation) is usually preferred.
 
 # Species Accumulation Curves
 
@@ -396,7 +399,8 @@ Rarefaction curve = theoritical expectation of the accumulation curve (si on la 
 
 With the exact total number of species in the community, we can guess the number of species expected at a certain sample size
 
-**Multinomial distribution** = set of binomial distributions that guarantee that the total number of individuals = sample size ? smth like that
+**Multinomial distribution** = set of binomial distributions that guarantee that the total number of individuals = sample size ?
+smth like that
 
 \*\*Vague explication de la formule generalized Simpson entropy :\*\* probability to sample a new individual at each new sampled individual :\
 Ps(1-Ps)\^n \| Ps = probability to draw species S so 1-Ps = probability to draw another species than S and this probability n times (for n drawings) -\> \^n
@@ -433,7 +437,8 @@ arrange(desc(abundance))
 
 ## Accumulation of subplots
 
-Accumulate subplots in random order (Monte-Carlo). Plot the expectation and the confidence interval of the number of species with respect to the number of samples.
+Accumulate subplots in random order (Monte-Carlo).
+Plot the expectation and the confidence interval of the number of species with respect to the number of samples.
 
 ```{r}
 # Plot par plot, pas par individu avec specaccum de vegan (et la manière dont le df de BCI est fait avec 1 ligne par plot ici)
@@ -479,7 +484,17 @@ species are aggregated\
 when doing field surveys, we sample trees close to each other (samples are not independant)\
 -\> we cannot multiply the probabilities
 
+### Arrhenius's law
+
+$$
+ln[S(A)] = ln c + z ln(A)
+$$
+
+S(A) : number of species depending on the area
+
 # Canonical lognormal
+
+Si l'abondance de l'espèce la plus abondante correspond au nombre d'individus max sur la courbe individus alors c'est une distribution lognormal canonique.
 
 ggplot seems to bug with weighted, bounded density and log scale.
 
@@ -526,7 +541,29 @@ abline(v = max(log10(BCI_50ha_abd)), lty = 2)
 
 ```
 
+red curve : species curve : probabilty to encounter a species with the given abundance\
+black curve : individual curve : probability when you pull an individual to be part of a species that has the given abundance\
+Max of the black curve = max number of individuals.
+When it corresponds to the abundance of the most abundant species then it is cannonical lognormal.
+And then when you mix local scale and metacommunity?
+the distribution follows the power law.
+
+# II. Theory of the Measurement of Biodiversity
+
 # Richness
+
+$$
+C = S_{obs} / S_{obs} + S_1
+$$
+
+### Jackknife estimators :
+
+On considère que le nombre d'espèce que j'ai manqué S_0 = le nombre d'espèces que j'ai vu qu'une seule fois S_1.\
+Pour les espèces vues 1 fois : y'en a probablement beaucoup que j'aurais pu voir 2 fois en réalité.
+Donc je surestime S_1 donc je soustrais le nombre d'espèce que j'ai vu 2 fois.
+Etc.
+On a une succession de + (à chaque nombre impair) et de - (à chaque nombre pair).\
+Sample coverage = nb espèce échantillonnées / nb total d'espèce -\> over 70% si on veut utiliser jackknife1.
 
 ## Dummy communities
 
@@ -551,8 +588,11 @@ div_richness(comm_dummy, estimator = "naive")
 Asymptotic richness.
 
 ```{r}
+# on précise pas l'estimateur donc la fonction prend le meilleur
 div_richness(comm_dummy)
 ```
+
+site_3 : 3 espèces prédites car il y a un singleton
 
 ## Paracou 6
 
@@ -574,6 +614,12 @@ Abundance frequencies.
 p6_abundances %>% 
   as.numeric() %>% 
   abd_freq_count()
+
+# pour lire les abondances décroissantes (pratique)
+p6_abundances %>% 
+  as.numeric() %>% 
+  abd_freq_count() %>%
+  arrange(desc(abundance))
 ```
 
 Estimators of richness.
@@ -590,6 +636,7 @@ div_richness(p6_abundances, estimator = "naive") %>%
 ## Interpolation / extrapolation
 
 Diversity of 1 ha in Paracou.
+Quand on interpole : on a la expected value qui est une valeur exacte (d'après la loi multinomiale bien connue, à gauche de la courbe d'accumulation).
 
 ```{r}
 # Number of trees per hectare
@@ -597,9 +644,11 @@ p6_density <- abd_sum(p6_abundances, as_numeric = TRUE) / 6.25
 # Richness
 p6_abundances %>% 
   div_richness(level = round(p6_density))
+# obtenue par raréfaction : on part du sample de 6ha dont on connait la richesse et on diminue jusqu'à prendre la richesse qui correspond au nombre d'arbres p6_density (=nombre d'arbres par hectare).
 ```
 
 Diversity of 10 ha in Paracou.
+Quand on extrapole : on obtient une valeur approximée (droite de la courbe d'accumulation).
 
 ```{r}
 # Richness
@@ -607,7 +656,25 @@ p6_abundances %>%
   div_richness(level = round(10 * p6_density))
 ```
 
+#### **For comparing plots with different areas :**
+
+You compare the asymptotic diversity but if sampand it's okay.
+But if sampling isn't large enough (less than 5,10 ha of data) or asymptotic too large?,
+then extra/interpole the data to standardize to a certain area :\
+usually we take area = **twice the size of the smallest plot.**
+
 # Shannon
+
+"Complexity" = nb of possible interactions of any length (n) given the probability of each species\
+= entropy
+
+#### Definition of entropy :
+
+"information" = how surprise am i (when meeting a common/rare species)\
+if p=0 then J=+infini\
+if p=1 then J=0 (no surprise)\
+Average information = weighted mean ($p_s*J(p_s)$)\
+**Rarity of a species = reciprocal of its probability -\> 1/ps**
 
 ## Information function
 
@@ -627,6 +694,23 @@ ggplot() +
   geom_function(fun = \(p) {p * log(1 / p)}, n = 1001) +
   labs(x = "Probability", y = "Information")
 ```
+
+**Very rare species : very low probability. So when multiplying the information with the probability, the information isn't big enough to compensate for the very low probability -\> courbe en cloche**
+
+#### Effective number of species :
+
+Je considère que les S espèces ont la même probabilité 1/S, et je connais l'entropie de ma communité.
+S = effective number of species = nb d'espèces que j'ai avec cette entropie (et la même proba pour chacune) -\> $S=e^H$\
+= minimum number of species for having that entropy
+
+#### Estimators of entropy :
+
+Espèces rares : si on les voit leur proba est surestimée et si on les manque leur proba est sous-estimée.\
+-\> ChaoJost estimator : applique une correction par rapport au fait que les probas sont approximées.
+
+-\> UnveilJ : calcule de manière plus précise les probas (j'ai pas écouté comment) pour appliquer après la formule de base (c'est bien si on a trop de singletons auquel cas Chao1 ne convient pas, bref regarder diapo 34).
+
+![diapo 31 explanation](images/Sans%20titre.png)
 
 ## Paracou 6
 
@@ -658,6 +742,9 @@ ent_shannon(comm_dummy, estimator = "naive")
 
 # Simpson
 
+Ne prend pas en compte les espèces rares (aucun poids dans la formule).
+Peu de surprise quand on draw une espèce rare.
+
 ## Paracou 6
 
 Estimators.
@@ -679,6 +766,16 @@ p6_simpson %>%
 ```
 
 # Generalized entropy
+
+La sensibilité de la surprise détermine la mesure qu'on utilise (richness, Shannon or Simpson).\
+Le paramètre q dans la formule généralisée dit à quel point on s'intéresse aux espèces rares :\
+plus q est grand moins on s'intéresse aux espèces rares.
+
+𝐷0 = number of species\
+D1 = diversity according to Shannon\
+D2 = diversity according to Simpson\
+Si on va vers la droite du graph = q augmente = on fait de moins en moins attention aux espèces rares :\
+D_infini = 1/p_max (plus qu'une espèce).
 
 ## Information
 
@@ -781,7 +878,8 @@ profile_hill(p6_abundances, orders = q_seq_0_4) %>%
 
 ## Standardized diversity
 
-The sampling effort is very different: 50 ha in BCI, 6.25 ha in Paracou. The asymptotic estimation is less reliable in Paracou.
+The sampling effort is very different: 50 ha in BCI, 6.25 ha in Paracou.
+The asymptotic estimation is less reliable in Paracou.
 
 Compare diversity at the same sampling effort, say 10 ha.
 
@@ -806,7 +904,7 @@ coverage(p6_abundances) %>%
   bind_rows(coverage(BCI_all))
 ```
 
-Compare diversity at the same sample coverage [@Chao2012b], that of Paracou.
+It's usually better to compare diversity at the same sample coverage [@Chao2012b], instead of the area (arbres plus petits -\> + d'arbres par unité de surface).
 
 ```{r}
 reference_coverage <- coverage(p6_abundances, as_numeric = TRUE)
@@ -816,6 +914,8 @@ profile_hill(p6_abundances, level = reference_coverage) %>%
 ```
 
 # Phylogenetic diversity
+
+La formule horrible : on cut à chaque fois que ya une spéciation puis on calcule l'entropie pour chaque temps k et on moyenne l'entropie générale
 
 ## Mock data
 
@@ -849,7 +949,8 @@ Rao.
 ent_rao(mock_3sp_abundances, tree = mock_3sp_tree, estimator = "naive")
 ```
 
-The tree is normalized to height = 1 by default. Without normalization:
+The tree is normalized to height = 1 by default.
+Without normalization: here it doubles
 
 ```{r}
 ent_rao(
@@ -859,6 +960,8 @@ ent_rao(
   normalize = FALSE
 )
 ```
+
+The entropy is the average length along the tree -\> good idea to normallize.
 
 ## Paracou 6
 
@@ -871,19 +974,27 @@ plot(paracou_6_taxo, type = "fan", show.tip.label = FALSE)
 Calculate Rao's entropy and phylogenetic entropy of order 2
 
 ```{r}
+# rao's way : average along the tree
 ent_rao(p6_abundances, tree = paracou_6_taxo) %>% 
   bind_rows(
     ent_phylo(p6_abundances, tree = paracou_6_taxo, q = 2)
   )
+#ent_phylo : general way : cuts the tree in slices then computes the simpson entropy in each slice 
 ```
 
-Rao's entropy is not an effective number of species, but the average phylogenetic distance between two individuals. The corresponding Hill number is:
+High entropy value : high probability that 2 drawn species are completely different.
+
+Rao's entropy is not an effective number of species, but the average phylogenetic distance between two individuals.
+**The corresponding Hill number is:**
 
 ```{r}
+# fonction pour le hill number :
 div_phylo(p6_abundances, tree = paracou_6_taxo, q = 2)
 ```
 
-Diversity profile
+Nombre d'espèces qu'on aurait avec cette entropie si elles étaient toutes à la même distance de leur ancêtre commun (chacune a 1 seul ancêtre commun).
+
+\*\*Diversity profile\*\*
 
 ```{r}
 profile_phylo(p6_abundances, tree = paracou_6_taxo) %>% 
@@ -894,7 +1005,9 @@ profile_phylo(p6_abundances, tree = paracou_6_taxo) %>%
 
 ## Mock data
 
-The same mock data is used. Distances between species is now assumed to be in the trait space. Distances between species.
+The same mock data is used.
+Distances between species is now assumed to be in the trait space.
+Distances between species.
 
 ```{r}
 mock_3sp_dist
@@ -956,7 +1069,9 @@ ent_similarity(
 
 ## Paracou 6
 
-The species traits are maximum height (95^th^ percentile) and seed mass, maximum height (95^th^ percentile) and seed mass. A distance matrix was built (see home practical). Distribution of distances between species.
+The species traits are maximum height (95^th^ percentile) and seed mass, maximum height (95^th^ percentile) and seed mass.
+A distance matrix was built (see home practical).
+Distribution of distances between species.
 
 ```{r}
 paracou_6_fundist %>% 
@@ -1008,7 +1123,8 @@ mock_3sp_ind %>%
   coord_fixed()
 ```
 
-Diversity of the 6 individuals. First, without variability.
+Diversity of the 6 individuals.
+First, without variability.
 
 ```{r}
 # Choose variability
@@ -1052,9 +1168,9 @@ Three habitats: A, B, C.
 ```{r}
 matrix(
   c(
-    0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 0, 1, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 1, 1, 1
+    0, 0, 0, 0, 0, 3, 3, 3, 3, 3,
+    3, 3, 3, 3, 3, 3, 0, 3, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 3, 3, 3
   ),
   nrow = 3, 
   byrow = TRUE
@@ -1062,25 +1178,48 @@ matrix(
   as_abundances() %>% 
   mutate(
     site = paste("Habitat", LETTERS[1:3]),
-    weight = 1
+    weight = 1 # weight = arbitraire, useful for example if you trust a dataset more than others. Not useful if you have a larger plot because there are already the information of more trees in that plot. 
   ) ->
   mock_island_abd
+print(mock_island_abd)
 ```
 
 Richness.
 
 ```{r}
-div_richness(mock_island_abd, estimator = "naive")
-div_richness(mock_island_abd, gamma = TRUE, estimator = "naive")
+div_richness(mock_island_abd)
+# so here alpha = mean of 7, 5 & 3 = 5
+div_richness(mock_island_abd, gamma = TRUE)
 ```
 
-Multiplicative partitioning: 10 effective species ($\gamma$) = 5 effective species per habitat ($\alpha$) times 2 habitats ($\beta$).
+[Multiplicative partitioning]{.underline}: 10 effective species ($\gamma$) = 5 effective species per habitat ($\alpha$) times 2 habitats ($\beta$).
 
 ```{r}
-div_part(mock_island_abd, q = 0, estimator = "naive")
+div_part(mock_island_abd, q = 0)
 ```
 
-Additive partitioning: 10 effective species ($\gamma$) = 5 effective species per habitat ($\alpha$) + 5 more species ($\beta$).
+[Additive partitioning]{.underline}: 10 effective species ($\gamma$) = 5 effective species per habitat ($\alpha$) + 5 more species ($\beta$).
+
+⍺ = in average, each community has alpha species.
+It is not the single diversity of 1 habitat.
+It's a mean of several habitats.
+It's the average of **entropy**, not diversity.
+Here it is the same of calculating the mean of the diversity because we are computing the basic richness : deformed exponential = +1.
+On fait +1 et -1 donc ça revient au même.
+Si on s'intéresse à une diversité d'ordre supérieur le résultat de alpha sera différent.
+Calculate mean entropy and then take the exponential to get alpha diversity.
+
+\
+The number of habitats = number of habitats = \beta = hill number.\
+It is proportionnal diversity : beta diversity : en moyenne, à quel point les plots sont différents de l'ensemble (gamma).
+
+$$
+entropy : \gamma = \alpha + \beta 
+$$
+
+$$
+diversity :e^\gamma = e^\alpha * e^\beta 
+$$
 
 ## Paracou 6
 
@@ -1098,10 +1237,11 @@ paracou_6_abd %>%
 Function `div_part()` computes $\alpha$, $\beta$ and $\gamma$ diversity.
 
 ```{r}
+# Ici on calcule l'entropie de Shannon
 div_part(paracou_6_abd, q = 1)
 ```
 
-### Step by step
+### Step by step : what the computer does
 
 ```{r}
 # Alpha entropy
