@@ -1211,7 +1211,7 @@ Calculate mean entropy and then take the exponential to get alpha diversity.
 
 \
 The number of habitats = number of habitats = \beta = hill number.\
-It is proportionnal diversity : beta diversity : en moyenne, à quel point les plots sont différents de l'ensemble (gamma).
+**It is proportionnal diversity :** beta diversity : en moyenne, à quel point les plots sont différents de l'ensemble (gamma).
 
 $$
 entropy : \gamma = \alpha + \beta 
